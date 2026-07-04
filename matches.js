@@ -1,3 +1,5 @@
+// --- START OF FILE matches.js ---
+
 import { 
   db, 
   doc,
@@ -22,6 +24,126 @@ let currentMatchMode = 'All';
 let currentMatchStatus = 'All'; 
 let currentViewId = 'home';
 let activeJoinTournament = null;
+let activeDetailsTournamentId = null;
+
+// --- DYNAMIC CLIPBOARD UTILITY ---
+
+window.copyValue = function(text, label) {
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    window.showToast(`✓ ${label} Copied`, "success");
+  }).catch((err) => {
+    console.error("Clipboard copy operation failed:", err);
+  });
+};
+
+// --- WINNER SPLIT CALCULATOR & FLOATING POPUP ENGINE ---
+
+function getWinnerSplitArray(t) {
+  const prize = Number(t.winnerPrize || 0);
+  const mode = (t.mode || t.matchType || 'Solo').toLowerCase();
+
+  if (t.winnerSplit) {
+    if (Array.isArray(t.winnerSplit)) {
+      return t.winnerSplit.map(Number);
+    }
+    if (typeof t.winnerSplit === 'string') {
+      return t.winnerSplit.split(',').map(s => Number(s.trim()));
+    }
+    if (typeof t.winnerSplit === 'object') {
+      return Object.values(t.winnerSplit).map(Number);
+    }
+  }
+
+  // Fallback: even split based on dynamic rosters
+  let numPlayers = 1;
+  if (mode === 'duo') numPlayers = 2;
+  if (mode === 'squad') numPlayers = 4;
+
+  const share = prize / numPlayers;
+  return Array(numPlayers).fill(share);
+}
+
+window.showWinnerSplitPopup = function(event, tournamentId) {
+  event.stopPropagation();
+  const t = allTournaments.find(tourn => tourn.id === tournamentId);
+  if (!t) return;
+
+  const popup = document.getElementById('winner-split-popup');
+  const content = document.getElementById('winner-split-content');
+  if (!popup || !content) return;
+
+  const totalPrize = Number(t.winnerPrize || 0);
+  const mode = (t.mode || t.matchType || 'Solo');
+  const split = getWinnerSplitArray(t);
+
+  let html = `
+    <div class="flex justify-between font-bold text-slate-300">
+      <span>Total Prize</span>
+      <span class="text-yellow-400">₹${totalPrize}</span>
+    </div>
+    <div class="h-[1px] bg-gold/10 my-1"></div>
+  `;
+
+  split.forEach((val, index) => {
+    const label = mode.toLowerCase() === 'solo' ? 'Player' : `Player ${index + 1}`;
+    html += `
+      <div class="flex justify-between text-[11px] text-slate-400">
+        <span>${label}</span>
+        <span class="text-white font-mono">₹${val.toFixed(2).replace('.00', '')}</span>
+      </div>
+    `;
+  });
+
+  content.innerHTML = html;
+
+  popup.classList.remove('hidden');
+
+  requestAnimationFrame(() => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const popupWidth = popup.offsetWidth || 224;
+    const popupHeight = popup.offsetHeight || 120;
+
+    let left = rect.left + window.scrollX + (rect.width - popupWidth) / 2;
+    let top = rect.top + window.scrollY - popupHeight - 10;
+
+    if (left < 10) left = 10;
+    if (left + popupWidth > window.innerWidth - 10) {
+      left = window.innerWidth - popupWidth - 10;
+    }
+    if (top < window.scrollY + 10) {
+      top = rect.bottom + window.scrollY + 10;
+    }
+
+    popup.style.left = `${left}px`;
+    popup.style.top = `${top}px`;
+    popup.style.transform = 'scale(1)';
+    popup.style.opacity = '1';
+    popup.style.pointerEvents = 'auto';
+  });
+
+  const outsideClickListener = (e) => {
+    if (!popup.contains(e.target) && !event.currentTarget.contains(e.target)) {
+      window.closeWinnerSplitPopup();
+      document.removeEventListener('click', outsideClickListener);
+    }
+  };
+  document.addEventListener('click', outsideClickListener);
+};
+
+window.closeWinnerSplitPopup = function() {
+  const popup = document.getElementById('winner-split-popup');
+  if (popup) {
+    popup.style.transform = 'scale(0.95)';
+    popup.style.opacity = '0';
+    popup.style.pointerEvents = 'none';
+    setTimeout(() => {
+      popup.classList.add('hidden');
+    }, 200);
+  }
+};
+
+// --- MODAL CONTROLLERS & TRIGGER BINDINGS ---
 
 window.openJoinModal = function(tournamentId) {
   if (!window.currentUserDoc) {
@@ -55,6 +177,64 @@ window.openJoinModal = function(tournamentId) {
 window.closeJoinModal = function() {
   activeJoinTournament = null;
   const modal = document.getElementById('join-modal');
+  if (modal) {
+    modal.classList.add('opacity-0', 'pointer-events-none');
+  }
+};
+
+window.openRoomModal = function(tournamentId) {
+  const tourn = allTournaments.find(t => t.id === tournamentId);
+  if (!tourn) return;
+
+  const vPanel = document.getElementById('room-content-visible');
+  const hPanel = document.getElementById('room-content-hidden');
+
+  if (!vPanel || !hPanel) return;
+
+  const isJoined = myParticipations.some(p => p.tournamentId === tourn.id);
+  const isRoomPublished = tourn.roomPublished === true || tourn.showRoomDetails === true;
+
+  if (isJoined && isRoomPublished && tourn.roomId) {
+    vPanel.innerHTML = `
+      <p class="text-[10px] text-emerald-400 font-bold uppercase tracking-widest mb-1">Credentials Active</p>
+      <div class="bg-black/60 p-4 rounded-xl border border-gold/15 space-y-3 text-left font-grotesk">
+        <div class="flex justify-between items-center border-b border-gold/10 pb-2">
+          <div>
+            <strong class="text-white font-mono text-sm tracking-wider">ID : ${tourn.roomId}</strong>
+          </div>
+          <button onclick="window.copyValue('${tourn.roomId}', 'Room ID')" class="px-2.5 py-1 bg-[#d4af37]/10 hover:bg-[#d4af37] text-[#d4af37] hover:text-black rounded-lg border border-[#d4af37]/30 text-[10px] font-bold uppercase transition-all flex items-center gap-1">📋 Copy</button>
+        </div>
+        <div class="flex justify-between items-center pt-1">
+          <div>
+            <strong class="text-white font-mono text-sm tracking-wider">PW : ${tourn.roomPassword || "No Password"}</strong>
+          </div>
+          <button onclick="window.copyValue('${tourn.roomPassword || ''}', 'Password')" class="px-2.5 py-1 bg-[#d4af37]/10 hover:bg-[#d4af37] text-[#d4af37] hover:text-black rounded-lg border border-[#d4af37]/30 text-[10px] font-bold uppercase transition-all flex items-center gap-1">📋 Copy</button>
+        </div>
+      </div>
+    `;
+    vPanel.classList.remove('hidden');
+    hPanel.classList.add('hidden');
+  } else {
+    hPanel.innerHTML = `
+      <i class="fa-solid fa-lock text-slate-500 text-3xl my-2"></i>
+      <div class="flex flex-col gap-2 items-center text-xs text-slate-500 font-semibold uppercase tracking-wider py-1 font-mono">
+        <span class="bg-black/40 px-2.5 py-1 rounded border border-purple-500/5">ID : HIDDEN 🔒</span>
+        <span class="bg-black/40 px-2.5 py-1 rounded border border-purple-500/5">PW : HIDDEN 🔒</span>
+      </div>
+      <p class="text-xs text-slate-400 font-medium mt-2">Room ID and Password will be displayed here once enabled by the Admin before the match starts.</p>
+    `;
+    vPanel.classList.add('hidden');
+    hPanel.classList.remove('hidden');
+  }
+
+  const modal = document.getElementById('room-details-modal');
+  if (modal) {
+    modal.classList.remove('opacity-0', 'pointer-events-none');
+  }
+};
+
+window.closeRoomModal = function() {
+  const modal = document.getElementById('room-details-modal');
   if (modal) {
     modal.classList.add('opacity-0', 'pointer-events-none');
   }
@@ -171,6 +351,187 @@ if (joinFormEl) {
   });
 }
 
+// --- POPUP DETAILS ENGINE RENDERING ---
+
+export function updateMatchDetailsModalContent(tournamentId) {
+  const t = allTournaments.find(tourn => tourn.id === tournamentId);
+  if (!t) return;
+
+  const DEFAULT_BANNER = "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=1200&auto=format&fit=crop";
+  const bannerSrc = (t.banner && t.banner.trim() !== '') ? t.banner : DEFAULT_BANNER;
+
+  setSafeText('md-popup-title', t.title);
+  setSafeText('md-popup-mode', t.mode || t.matchType || "Solo");
+  setSafeText('md-popup-map', t.map || "ERANGEL");
+  setSafeText('md-popup-date', t.date || "—");
+  setSafeText('md-popup-time', t.time || "—");
+  setSafeText('md-popup-prize', `₹${t.prizePool || 0}`);
+  setSafeText('md-popup-perkill', `₹${t.perKill || 0}`);
+  setSafeText('md-popup-fee', `₹${t.entryFee || 0}`);
+  setSafeText('md-popup-winners', `₹${t.winnerPrize || 0}`);
+
+  const winnersBtn = document.getElementById('md-popup-winners-btn');
+  if (winnersBtn) {
+    winnersBtn.setAttribute('onclick', `window.showWinnerSplitPopup(event, '${t.id}')`);
+  }
+
+  const imgEl = document.getElementById('md-popup-banner');
+  if (imgEl) imgEl.src = bannerSrc;
+
+  const descSec = document.getElementById('md-popup-desc-sec');
+  const descEl = document.getElementById('md-popup-description');
+  const descriptionText = t.description || t.mapDescription || '';
+  if (descSec && descEl) {
+    if (descriptionText.trim() !== '') {
+      descSec.classList.remove('hidden');
+      descEl.innerText = descriptionText;
+    } else {
+      descSec.classList.add('hidden');
+    }
+  }
+
+  const rulesSec = document.getElementById('md-popup-rules-sec');
+  const rulesEl = document.getElementById('md-popup-rules');
+  const rulesText = t.rules || t.matchRules || '';
+  if (rulesSec && rulesEl) {
+    if (rulesText.trim() !== '') {
+      rulesSec.classList.remove('hidden');
+      rulesEl.innerText = rulesText;
+    } else {
+      rulesSec.classList.add('hidden');
+    }
+  }
+
+  const isJoined = myParticipations.some(p => p.tournamentId === t.id);
+
+  // Dynamic Room Access UI Block - Live Sync compatible & secured
+  const roomSec = document.getElementById('md-popup-room-sec');
+  if (roomSec) {
+    let statusLabel = '';
+    let statusCls = '';
+    let bodyHtml = '';
+    const isRoomPublished = t.roomPublished === true || t.showRoomDetails === true;
+
+    if (isJoined) {
+      if (isRoomPublished && t.roomId) {
+        statusLabel = "Released";
+        statusCls = "bg-emerald-500/10 border border-emerald-500 text-emerald-400";
+        bodyHtml = `
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
+            <div class="bg-purple-950/40 p-3 rounded-xl border border-purple-500/15 flex justify-between items-center font-grotesk">
+              <span class="text-white font-mono text-sm tracking-wider">ID : ${t.roomId}</span>
+              <button onclick="window.copyValue('${t.roomId}', 'Room ID')" class="px-2.5 py-1 bg-[#d4af37]/10 hover:bg-[#d4af37] text-[#d4af37] hover:text-black rounded-lg border border-[#d4af37]/30 text-[10px] font-bold uppercase transition-all flex items-center gap-1">📋 Copy</button>
+            </div>
+            <div class="bg-purple-950/40 p-3 rounded-xl border border-purple-500/15 flex justify-between items-center font-grotesk">
+              <span class="text-white font-mono text-sm tracking-wider">PW : ${t.roomPassword || "No Password"}</span>
+              <button onclick="window.copyValue('${t.roomPassword || ''}', 'Password')" class="px-2.5 py-1 bg-[#d4af37]/10 hover:bg-[#d4af37] text-[#d4af37] hover:text-black rounded-lg border border-[#d4af37]/30 text-[10px] font-bold uppercase transition-all flex items-center gap-1">📋 Copy</button>
+            </div>
+          </div>
+        `;
+      } else {
+        statusLabel = "Awaiting";
+        statusCls = "bg-yellow-500/10 border border-yellow-500 text-yellow-400 animate-pulse";
+        bodyHtml = `
+          <div class="space-y-3 pt-1 text-center font-grotesk">
+            <div class="flex justify-center gap-4 text-xs text-slate-500 font-semibold uppercase tracking-wider py-1 font-mono">
+              <span class="bg-black/40 px-2.5 py-1 rounded border border-purple-500/5">ID : HIDDEN 🔒</span>
+              <span class="bg-black/40 px-2.5 py-1 rounded border border-purple-500/5">PW : HIDDEN 🔒</span>
+            </div>
+            <p class="text-xs text-slate-400 italic">Room ID & Password will be displayed here once enabled by the Admin before the match starts.</p>
+          </div>
+        `;
+      }
+    } else {
+      statusLabel = "Locked";
+      statusCls = "bg-red-500/10 border border-red-500 text-red-400";
+      bodyHtml = `
+        <div class="space-y-3 pt-1 text-center font-grotesk">
+          <div class="flex justify-center gap-4 text-xs text-slate-500 font-semibold uppercase tracking-wider py-1 font-mono">
+            <span class="bg-black/40 px-2.5 py-1 rounded border border-purple-500/5">ID : HIDDEN 🔒</span>
+            <span class="bg-black/40 px-2.5 py-1 rounded border border-purple-500/5">PW : HIDDEN 🔒</span>
+          </div>
+          <p class="text-xs text-slate-400 italic">Unlock Room credentials after joining this match roster.</p>
+        </div>
+      `;
+    }
+
+    roomSec.innerHTML = `
+      <h5 class="text-xs font-bold uppercase text-purple-300 tracking-widest flex items-center justify-between border-b border-purple-500/10 pb-2">
+        <span><i class="fa-solid fa-key mr-1.5 text-gold"></i> Room Credentials</span>
+        <span class="text-[9px] px-2 py-0.5 rounded font-black ${statusCls}">${statusLabel}</span>
+      </h5>
+      ${bodyHtml}
+    `;
+  }
+
+  // Join Action Button config injection inside popup
+  const btnContainer = document.getElementById('md-popup-join-btn-container');
+  if (btnContainer) {
+    const max = Number(t.maxPlayers) || 100;
+    const joined = Number(t.joinedCount) || 0;
+    const remaining = Math.max(0, max - joined);
+    const status = (t.status || 'upcoming').toLowerCase();
+
+    let btnHtml = '';
+    if (isJoined) {
+      btnHtml = `
+        <button disabled class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-rajdhani font-black rounded-xl text-sm uppercase tracking-wider cursor-not-allowed shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+          JOINED ✓
+        </button>
+      `;
+    } else if (status === 'completed') {
+      btnHtml = `
+        <button disabled class="w-full py-3 bg-neutral-800 text-neutral-500 border border-neutral-700/30 font-rajdhani font-black rounded-xl text-sm uppercase tracking-wider cursor-not-allowed">
+          MATCH COMPLETED
+        </button>
+      `;
+    } else if (status === 'cancelled') {
+      btnHtml = `
+        <button disabled class="w-full py-3 bg-red-950/40 text-red-400 border border-red-900/30 font-rajdhani font-black rounded-xl text-sm uppercase tracking-wider cursor-not-allowed">
+          MATCH CANCELLED
+        </button>
+      `;
+    } else if (remaining <= 0) {
+      btnHtml = `
+        <button disabled class="w-full py-3 bg-neutral-900 text-neutral-600 border border-neutral-800 font-rajdhani font-black rounded-xl text-sm uppercase tracking-wider cursor-not-allowed">
+          SLOTS FULL
+        </button>
+      `;
+    } else {
+      btnHtml = `
+        <button onclick="window.closeMatchDetailsModal(); window.openJoinModal('${t.id}')" class="w-full py-3 bg-gradient-to-r from-gold via-gold-light to-gold-dark text-[#0f041e] font-rajdhani font-black rounded-xl text-sm uppercase tracking-wider hover:shadow-[0_0_20px_rgba(212,175,55,0.45)] transition-all">
+          <i class="fa-solid fa-bolt mr-1"></i> JOIN — ₹${t.entryFee}
+        </button>
+      `;
+    }
+    btnContainer.innerHTML = btnHtml;
+  }
+}
+
+window.openMatchDetailsModal = function(tournamentId) {
+  activeDetailsTournamentId = tournamentId;
+  window.activeDetailsTournamentId = tournamentId;
+  const modal = document.getElementById('match-details-modal');
+  if (!modal) return;
+
+  updateMatchDetailsModalContent(tournamentId);
+
+  modal.classList.add('modal-active');
+  modal.classList.remove('opacity-0', 'pointer-events-none');
+};
+
+window.closeMatchDetailsModal = function() {
+  activeDetailsTournamentId = null;
+  window.activeDetailsTournamentId = null;
+  const modal = document.getElementById('match-details-modal');
+  if (modal) {
+    modal.classList.remove('modal-active');
+    modal.classList.add('opacity-0', 'pointer-events-none');
+  }
+};
+
+// --- CORE BATTLES FEED RENDERING ---
+
 export function renderMatches() {
   const feed = document.getElementById('matches-feed');
   if (!feed) return;
@@ -181,7 +542,7 @@ export function renderMatches() {
 
   let filtered = allTournaments;
   if (currentMatchMode !== 'All') {
-    filtered = filtered.filter(t => t.mode === currentMatchMode);
+    filtered = filtered.filter(t => (t.mode || t.matchType || 'Solo') === currentMatchMode);
   }
   if (currentMatchStatus !== 'All') {
     filtered = filtered.filter(t => (t.status || 'upcoming').toLowerCase() === currentMatchStatus.toLowerCase());
@@ -209,7 +570,9 @@ export function renderMatches() {
     const remaining = Math.max(0, max - joined);
     const progress = Math.min(100, Math.round((joined / max) * 100));
     const status = (t.status || 'upcoming').toLowerCase();
-    const mode = (t.mode || 'Solo');
+    const mode = (t.mode || t.matchType || 'Solo');
+    const mapName = (t.map || 'ERANGEL');
+    const winnerPrize = t.winnerPrize || 0;
 
     const isJoined = myParticipations.some(p => p.tournamentId === t.id);
     const bannerSrc = (t.banner && t.banner.trim() !== '') ? t.banner : DEFAULT_BANNER;
@@ -246,36 +609,29 @@ export function renderMatches() {
     const modeBg = { Solo: '#b8921e', Duo: '#ea580c', Squad: '#e11d48' };
     const modeColor = { Solo: '#120524', Duo: '#ffffff', Squad: '#ffffff' };
 
+    const isRoomPublished = t.roomPublished === true || t.showRoomDetails === true;
     let roomCredsHTML = '';
-    if (isJoined) {
-      if (t.showRoomDetails === true && t.roomId) {
-        roomCredsHTML = `
-          <div class="flex items-center gap-2 text-white">
-            <span class="bg-purple-950/60 px-2 py-0.5 rounded text-xs font-mono border border-purple-500/20">ID: ${t.roomId}</span>
-            <span class="bg-purple-950/60 px-2 py-0.5 rounded text-xs font-mono border border-purple-500/20">PW: ${t.roomPassword || "N/A"}</span>
-            <button onclick="navigator.clipboard.writeText('Room ID: ${t.roomId} Pass: ${t.roomPassword || ''}'); window.showToast('Copied Credentials!', 'success');" class="text-gold hover:text-white transition-colors ml-1 text-xs">
-              <i class="fa-solid fa-copy"></i>
-            </button>
-          </div>
-        `;
-      } else {
-        roomCredsHTML = `
-          <span class="text-[10px] text-purple-300 font-bold tracking-widest uppercase animate-pulse flex items-center gap-1">
-            <i class="fa-solid fa-hourglass-half"></i> AWAITING CREDENTIALS
+    
+    if (isJoined && isRoomPublished && t.roomId) {
+      roomCredsHTML = `
+        <div class="flex items-center gap-2 text-white">
+          <span class="bg-purple-950/60 px-1.5 py-0.5 rounded text-[10px] font-mono border border-purple-500/20 flex items-center gap-1">
+            ID : ${t.roomId} 
+            <i class="fa-regular fa-copy cursor-pointer text-gold hover:text-white transition-colors ml-0.5" onclick="event.stopPropagation(); window.copyValue('${t.roomId}', 'Room ID')"></i>
           </span>
-        `;
-      }
+          <span class="bg-purple-950/60 px-1.5 py-0.5 rounded text-[10px] font-mono border border-purple-500/20 flex items-center gap-1">
+            PW : ${t.roomPassword || "No Password"} 
+            <i class="fa-regular fa-copy cursor-pointer text-gold hover:text-white transition-colors ml-0.5" onclick="event.stopPropagation(); window.copyValue('${t.roomPassword || ''}', 'Password')"></i>
+          </span>
+        </div>
+      `;
     } else {
-      if (status === 'completed' || status === 'cancelled') {
-        roomCredsHTML = `<span class="text-slate-500 text-[10px] uppercase font-bold tracking-widest font-grotesk">Room Locked</span>`;
-      } else {
-        roomCredsHTML = `
-          <div class="flex items-center gap-2 text-slate-500 text-[10px] uppercase font-bold tracking-widest font-grotesk">
-            <span>ID: HIDDEN <i class="fa-solid fa-lock text-[9px] text-red-500"></i></span>
-            <span>PW: HIDDEN <i class="fa-solid fa-lock text-[9px] text-red-500"></i></span>
-          </div>
-        `;
-      }
+      roomCredsHTML = `
+        <div class="flex items-center gap-2 text-slate-500 text-[10px] font-mono font-bold">
+          <span class="bg-black/40 px-1.5 py-0.5 rounded border border-purple-500/5">ID : HIDDEN 🔒</span>
+          <span class="bg-black/40 px-1.5 py-0.5 rounded border border-purple-500/5">PW : HIDDEN 🔒</span>
+        </div>
+      `;
     }
 
     let actionButtonHTML = '';
@@ -305,95 +661,99 @@ export function renderMatches() {
       `;
     } else if (status === 'live') {
       actionButtonHTML = `
-        <button onclick="window.openJoinModal('${t.id}')" class="btn-join bg-gradient-to-r from-green-600 to-emerald-500 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] text-white font-rajdhani font-black">
+        <button onclick="event.stopPropagation(); window.openJoinModal('${t.id}')" class="btn-join bg-gradient-to-r from-green-600 to-emerald-500 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] text-white font-rajdhani font-black">
           <span class="live-dot" style="width:7px;height:7px;"></span> JOIN MATCH — ₹${t.entryFee}
         </button>
       `;
     } else {
       actionButtonHTML = `
-        <button onclick="window.openJoinModal('${t.id}')" class="btn-join bg-gradient-to-r from-gold via-gold-light to-gold-dark text-[#0f041e] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] font-rajdhani font-black">
+        <button onclick="event.stopPropagation(); window.openJoinModal('${t.id}')" class="btn-join bg-gradient-to-r from-gold via-gold-light to-gold-dark text-[#0f041e] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] font-rajdhani font-black">
           <i class="fa-solid fa-bolt text-xs"></i> JOIN MATCH — ₹${t.entryFee}
         </button>
       `;
     }
 
     const card = document.createElement('div');
-    card.className = 'match-card-premium';
+    card.className = 'match-card-premium cursor-pointer transform hover:-translate-y-1.5 transition-all duration-300';
+    card.setAttribute('onclick', `window.openMatchDetailsModal('${t.id}')`);
     card.innerHTML = `
-      <div class="match-card-banner relative h-[140px] overflow-hidden flex-shrink-0 bg-cyber-velvet">
+      <div class="match-card-banner relative h-[115px] overflow-hidden flex-shrink-0 bg-cyber-velvet">
         <div class="banner-skeleton" id="bsk-${t.id}"></div>
         <img
           src="${bannerSrc}"
           alt="${t.title}"
           loading="lazy"
-          class="absolute right-0 top-0 h-full w-[60%] sm:w-[50%] object-cover object-center z-0 opacity-80"
+          class="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+          style="opacity: 1 !important; filter: none !important;"
           onload="const sk=document.getElementById('bsk-${t.id}'); if(sk) sk.style.display='none';"
           onerror="this.src='${DEFAULT_BANNER}'; const sk=document.getElementById('bsk-${t.id}'); if(sk) sk.style.display='none';"
         >
-        <div class="absolute inset-0 bg-gradient-to-r from-[#0a0514] via-[#0a0514]/90 to-transparent z-10"></div>
         
-        <div class="absolute inset-0 p-4 flex flex-col justify-between z-20">
-          <div class="flex justify-between items-start w-full">
-            <span class="mode-badge inline-block px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider font-rajdhani" style="background:${modeBg[mode] || modeBg.Solo}; color:${modeColor[mode] || modeColor.Solo}; position: static; box-shadow: none;">
-              ${mode}
-            </span>
-            <span class="status-badge ${sc.cls}" style="position: static; backdrop-filter: none;">
-              ${sc.dotHtml}
-              <i class="fa-solid ${sc.icon}"></i>
-              ${sc.label}
-            </span>
-          </div>
-          
-          <div class="space-y-0.5">
-            <h4 class="font-rajdhani font-black text-2xl tracking-wider text-white truncate drop-shadow-md leading-none">${t.title}</h4>
-            <p class="text-[10px] sm:text-xs text-slate-300 font-bold tracking-wider uppercase font-grotesk flex items-center gap-1.5 mt-1">
-              <i class="fa-solid fa-users text-gold"></i> ${joined} Joined
-            </p>
-          </div>
+        <div class="absolute inset-x-0 top-0 p-3 flex justify-between items-start z-20">
+          <span class="mode-badge inline-block px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider font-rajdhani" style="background:${modeBg[mode] || modeBg.Solo}; color:${modeColor[mode] || modeColor.Solo}; position: static; box-shadow: none;">
+            ${mode}
+          </span>
+          <span class="status-badge ${sc.cls}" style="position: static; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); padding: 3px 8px; font-size: 8px;">
+            ${sc.dotHtml}
+            <i class="fa-solid ${sc.icon}"></i>
+            ${sc.label}
+          </span>
         </div>
       </div>
 
-      <div class="match-card-body">
-        <div class="flex items-center justify-between text-[10px] text-slate-400 font-grotesk tracking-wider uppercase">
-          <span class="flex items-center gap-1.5"><i class="fa-solid fa-calendar-days text-gold"></i> ${t.date || '—'}</span>
-          <span class="flex items-center gap-1.5"><i class="fa-solid fa-clock text-gold"></i> ${t.time || '—'}</span>
+      <div class="match-card-body p-3.5 flex-1 flex flex-col justify-between gap-2.5">
+        <!-- Match Name -->
+        <div>
+          <h4 class="font-rajdhani font-black text-lg sm:text-xl tracking-wider text-white uppercase truncate drop-shadow-md leading-tight">${t.title}</h4>
         </div>
 
-        <div class="grid grid-cols-4 gap-1.5 p-2.5 bg-black/40 border border-purple-500/10 rounded-xl text-center">
+        <!-- Date | Map | Time Row -->
+        <div class="text-[10px] text-slate-300 font-grotesk tracking-wider uppercase bg-black/40 py-1.5 px-2.5 border border-purple-500/10 rounded-xl flex items-center justify-between gap-1">
+          <span class="flex items-center gap-1"><i class="fa-solid fa-calendar-days text-gold text-[9px]"></i>${t.date || '—'}</span>
+          <span class="text-purple-500/20">|</span>
+          <span class="flex items-center gap-1"><i class="fa-solid fa-map text-gold text-[9px]"></i>${mapName}</span>
+          <span class="text-purple-500/20">|</span>
+          <span class="flex items-center gap-1"><i class="fa-solid fa-clock text-gold text-[9px]"></i>${t.time || '—'}</span>
+        </div>
+
+        <!-- Stats Grid (Prize Pool, Per Kill, Entry Fee, Winner Prize) -->
+        <div class="grid grid-cols-4 gap-1 p-2 bg-black/40 border border-purple-500/10 rounded-xl text-center">
           <div>
-            <span class="block text-[8px] uppercase tracking-wider text-slate-500 font-bold">Prize Pool</span>
-            <span class="block font-rajdhani font-extrabold text-sm text-yellow-400">₹${t.prizePool || 0}</span>
+            <span class="block text-[8px] uppercase tracking-wider text-slate-500 font-bold leading-none">Prize Pool</span>
+            <span class="block font-rajdhani font-extrabold text-[11px] sm:text-xs text-yellow-400 mt-1">₹${t.prizePool || 0}</span>
           </div>
           <div class="border-l border-purple-500/10">
-            <span class="block text-[8px] uppercase tracking-wider text-slate-500 font-bold">Per Kill</span>
-            <span class="block font-rajdhani font-extrabold text-sm text-purple-400">₹${t.perKill || 0}</span>
+            <span class="block text-[8px] uppercase tracking-wider text-slate-500 font-bold leading-none">Per Kill</span>
+            <span class="block font-rajdhani font-extrabold text-[11px] sm:text-xs text-purple-400 mt-1">₹${t.perKill || 0}</span>
           </div>
           <div class="border-l border-purple-500/10">
-            <span class="block text-[8px] uppercase tracking-wider text-slate-500 font-bold">Entry Fee</span>
-            <span class="block font-rajdhani font-extrabold text-sm text-emerald-400">₹${t.entryFee || 0}</span>
+            <span class="block text-[8px] uppercase tracking-wider text-slate-500 font-bold leading-none">Entry Fee</span>
+            <span class="block font-rajdhani font-extrabold text-[11px] sm:text-xs text-emerald-400 mt-1">₹${t.entryFee || 0}</span>
           </div>
-          <div class="border-l border-purple-500/10">
-            <span class="block text-[8px] uppercase tracking-wider text-slate-500 font-bold">Slots</span>
-            <span class="block font-rajdhani font-extrabold text-sm text-blue-400">${max}</span>
+          <div class="border-l border-purple-500/10 cursor-pointer hover:bg-white/5 rounded transition-all p-0.5" onclick="window.showWinnerSplitPopup(event, '${t.id}')">
+            <span class="block text-[8px] uppercase tracking-wider text-slate-500 font-bold leading-none">Winner Prize</span>
+            <span class="block font-rajdhani font-extrabold text-[11px] sm:text-xs text-blue-400 mt-1 truncate" title="Tap to view Prize Split">₹${winnerPrize} <i class="fa-solid fa-circle-info text-[8px]"></i></span>
           </div>
         </div>
 
+        <!-- Slots and Allocation Progress -->
         <div class="space-y-1">
-          <div class="flex justify-between items-center text-[10px] font-grotesk tracking-wider text-slate-400">
+          <div class="flex justify-between items-center text-[9px] font-grotesk tracking-wider text-slate-400">
             <span class="text-yellow-500 font-semibold flex items-center gap-1"><i class="fa-solid fa-users text-[8px]"></i> ${joined}/${max} Joined</span>
             <span class="${remaining <= 5 ? 'text-red-400 animate-pulse' : 'text-purple-300'} font-semibold">${remaining} Slots Left</span>
           </div>
-          <div class="progress-bar-wrap">
+          <div class="progress-bar-wrap h-1">
             <div class="h-full rounded-full bg-gradient-to-r from-purple-600 via-gold to-yellow-400 transition-all duration-500" style="width: ${progress}%"></div>
           </div>
         </div>
 
-        <div class="bg-[#120924]/60 border border-purple-500/20 rounded-xl px-3 py-1.5 flex items-center justify-between">
-          <span class="text-slate-400 font-semibold tracking-wider text-[9px] uppercase font-grotesk">Room details:</span>
+        <!-- Dynamic Locked Room Credentials status bar -->
+        <div class="bg-[#120924]/60 border border-purple-500/20 rounded-xl px-2.5 py-1 flex items-center justify-between min-h-[26px]">
+          <span class="text-slate-400 font-semibold tracking-wider text-[8px] uppercase font-grotesk">Room details:</span>
           ${roomCredsHTML}
         </div>
 
-        <div class="pt-1">
+        <div class="pt-0.5">
           ${actionButtonHTML}
         </div>
       </div>
@@ -488,5 +848,12 @@ export function initMatchesSync() {
     
     renderMatches();
     renderMyMatches();
+
+    // Re-evaluates open details modal context in real-time when snapshot values change
+    if (activeDetailsTournamentId) {
+      updateMatchDetailsModalContent(activeDetailsTournamentId);
+    }
   });
 }
+
+// --- END OF FILE matches.js ---

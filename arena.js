@@ -1,3 +1,5 @@
+// --- START OF FILE arena.js ---
+
 import { 
   db, 
   doc, 
@@ -85,12 +87,37 @@ window.openRoomModal = function(tournamentId) {
 
   if (!vPanel || !hPanel) return;
 
-  if (tourn.showRoomDetails === true && tourn.roomId) {
-    setSafeText('rd-id', tourn.roomId);
-    setSafeText('rd-pass', tourn.roomPassword || "No Password");
+  const isRoomPublished = tourn.roomPublished === true || tourn.showRoomDetails === true;
+
+  if (isRoomPublished && tourn.roomId) {
+    vPanel.innerHTML = `
+      <p class="text-[10px] text-emerald-400 font-bold uppercase tracking-widest mb-1">Credentials Active</p>
+      <div class="bg-black/60 p-4 rounded-xl border border-gold/15 space-y-3 text-left font-grotesk">
+        <div class="flex justify-between items-center border-b border-gold/10 pb-2">
+          <div>
+            <strong class="text-white font-mono text-sm tracking-wider">ID : ${tourn.roomId}</strong>
+          </div>
+          <button onclick="window.copyValue('${tourn.roomId}', 'Room ID')" class="px-2.5 py-1 bg-[#d4af37]/10 hover:bg-[#d4af37] text-[#d4af37] hover:text-black rounded-lg border border-[#d4af37]/30 text-[10px] font-bold uppercase transition-all flex items-center gap-1">📋 Copy</button>
+        </div>
+        <div class="flex justify-between items-center pt-1">
+          <div>
+            <strong class="text-white font-mono text-sm tracking-wider">PW : ${tourn.roomPassword || "No Password"}</strong>
+          </div>
+          <button onclick="window.copyValue('${tourn.roomPassword || ''}', 'Password')" class="px-2.5 py-1 bg-[#d4af37]/10 hover:bg-[#d4af37] text-[#d4af37] hover:text-black rounded-lg border border-[#d4af37]/30 text-[10px] font-bold uppercase transition-all flex items-center gap-1">📋 Copy</button>
+        </div>
+      </div>
+    `;
     vPanel.classList.remove('hidden');
     hPanel.classList.add('hidden');
   } else {
+    hPanel.innerHTML = `
+      <i class="fa-solid fa-lock text-slate-500 text-3xl my-2"></i>
+      <div class="flex flex-col gap-2 items-center text-xs text-slate-500 font-semibold uppercase tracking-wider py-1 font-mono">
+        <span class="bg-black/40 px-2.5 py-1 rounded border border-purple-500/5">ID : HIDDEN 🔒</span>
+        <span class="bg-black/40 px-2.5 py-1 rounded border border-purple-500/5">PW : HIDDEN 🔒</span>
+      </div>
+      <p class="text-xs text-slate-400 font-medium mt-2">Room ID and Password will be displayed here once enabled by the Admin before the match starts.</p>
+    `;
     vPanel.classList.add('hidden');
     hPanel.classList.remove('hidden');
   }
@@ -229,3 +256,5 @@ if (joinFormEl) {
     }
   });
 }
+
+// --- END OF FILE arena.js ---

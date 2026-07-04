@@ -1,3 +1,4 @@
+<!-- START OF FILE index.html --- -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -463,7 +464,8 @@ ESP<span class="text-white logo-span-light font-black">ORTS</span>
  </button>
 </div>
 
-<div id="matches-feed" class="grid grid-cols-1 md:grid-cols-2 gap-5"></div>
+<!-- Configured Grid Spacing Gap targeting independent Premium Luxury Cards -->
+<div id="matches-feed" class="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-10"></div>
 
 </section>
 
@@ -641,6 +643,121 @@ ESP<span class="text-white logo-span-light font-black">ORTS</span>
 </div>
 </div>
 
+<!-- Premium Match Details Modal -->
+<div id="match-details-modal" class="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+  <div class="glass-luxury w-full max-w-lg rounded-3xl border border-gold/30 overflow-hidden flex flex-col max-h-[90vh] shadow-[0_0_50px_rgba(212,175,55,0.15)] transform scale-95 transition-all duration-300">
+    <!-- Header Banner Image inside Popup -->
+    <div class="relative h-44 w-full overflow-hidden shrink-0 bg-[#0c071a]">
+      <img id="md-popup-banner" src="" class="w-full h-full object-cover">
+      <div class="absolute inset-0 bg-gradient-to-t from-[#0c071a] via-[#0c071a]/40 to-transparent"></div>
+      <!-- Close Button -->
+      <button onclick="window.closeMatchDetailsModal()" class="absolute top-4 right-4 w-9 h-9 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center text-white border border-white/10 transition-all hover:scale-110">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+      
+      <!-- Title & Mode Badge in Header -->
+      <div class="absolute bottom-4 left-5 right-5 z-10">
+        <span id="md-popup-mode" class="inline-block px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider font-rajdhani text-white bg-purple-600 mb-2">Solo</span>
+        <h3 id="md-popup-title" class="font-rajdhani font-black text-2xl sm:text-3xl text-white uppercase tracking-wider drop-shadow-md leading-tight">Match Title</h3>
+      </div>
+    </div>
+
+    <!-- Scrollable Content -->
+    <div class="p-6 overflow-y-auto custom-scrollbar space-y-5 font-grotesk text-slate-300 text-sm">
+      
+      <!-- Quick Specs Horizontal Info Row -->
+      <div class="bg-black/50 border border-gold/15 p-3 rounded-xl flex justify-around text-center text-xs font-semibold uppercase tracking-wider">
+        <div>
+          <span class="block text-[9px] text-slate-500">MAP</span>
+          <strong id="md-popup-map" class="text-gold">ERANGEL</strong>
+        </div>
+        <div class="w-[1px] bg-gold/10"></div>
+        <div>
+          <span class="block text-[9px] text-slate-500">DATE</span>
+          <strong id="md-popup-date" class="text-white">—</strong>
+        </div>
+        <div class="w-[1px] bg-gold/10"></div>
+        <div>
+          <span class="block text-[9px] text-slate-500">TIME</span>
+          <strong id="md-popup-time" class="text-white">—</strong>
+        </div>
+      </div>
+
+      <!-- Dynamic Description Section -->
+      <div id="md-popup-desc-sec" class="space-y-1.5 hidden">
+        <h5 class="text-xs font-bold uppercase text-gold tracking-widest"><i class="fa-solid fa-circle-info mr-1"></i> Map Description</h5>
+        <p id="md-popup-description" class="text-xs text-slate-400 leading-relaxed"></p>
+      </div>
+
+      <!-- Dynamic Rules Section -->
+      <div id="md-popup-rules-sec" class="space-y-1.5 hidden">
+        <h5 class="text-xs font-bold uppercase text-rose-400 tracking-widest"><i class="fa-solid fa-clipboard-list mr-1"></i> Match Rules</h5>
+        <p id="md-popup-rules" class="text-xs text-slate-400 leading-relaxed whitespace-pre-line bg-black/40 p-3 rounded-xl border border-red-500/10"></p>
+      </div>
+
+      <!-- Core Economics Details Grid -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+        <div class="bg-purple-950/20 border border-purple-500/10 p-2.5 rounded-xl">
+          <span class="block text-[9px] uppercase tracking-wider text-slate-500 font-bold">Prize Pool</span>
+          <strong id="md-popup-prize" class="block text-base text-yellow-400 font-rajdhani font-black">₹0</strong>
+        </div>
+        <div class="bg-purple-950/20 border border-purple-500/10 p-2.5 rounded-xl">
+          <span class="block text-[9px] uppercase tracking-wider text-slate-500 font-bold">Per Kill</span>
+          <strong id="md-popup-perkill" class="block text-base text-purple-400 font-rajdhani font-black">₹0</strong>
+        </div>
+        <div class="bg-purple-950/20 border border-purple-500/10 p-2.5 rounded-xl">
+          <span class="block text-[9px] uppercase tracking-wider text-slate-500 font-bold">Entry Fee</span>
+          <strong id="md-popup-fee" class="block text-base text-emerald-400 font-rajdhani font-black">₹0</strong>
+        </div>
+        <div id="md-popup-winners-btn" class="bg-purple-950/20 border border-purple-500/10 p-2.5 rounded-xl cursor-pointer hover:bg-purple-950/40 transition-all">
+          <span class="block text-[9px] uppercase tracking-wider text-slate-500 font-bold" id="md-popup-winners-label">Winner Prize</span>
+          <strong id="md-popup-winners" class="block text-base text-blue-400 font-rajdhani font-black truncate">₹0</strong>
+        </div>
+      </div>
+
+      <!-- Room Credentials Panel -->
+      <div id="md-popup-room-sec" class="bg-black/60 border border-purple-500/20 rounded-2xl p-4 space-y-2">
+        <h5 class="text-xs font-bold uppercase text-purple-300 tracking-widest flex items-center justify-between">
+          <span><i class="fa-solid fa-key mr-1 text-gold"></i> Room Credentials</span>
+          <span id="md-popup-room-status" class="text-[9px] px-2 py-0.5 rounded font-black">Locked</span>
+        </h5>
+        <div id="md-popup-room-creds" class="grid grid-cols-2 gap-3 text-xs pt-1 hidden">
+          <div class="bg-purple-950/40 p-2 rounded-lg border border-purple-500/10 flex justify-between items-center">
+            <span class="text-slate-500 font-semibold">Room ID</span>
+            <strong id="md-popup-room-id" class="text-white font-mono">...</strong>
+          </div>
+          <div class="bg-purple-950/40 p-2 rounded-lg border border-purple-500/10 flex justify-between items-center">
+            <span class="text-slate-500 font-semibold">Password</span>
+            <strong id="md-popup-room-pass" class="text-white font-mono">...</strong>
+          </div>
+        </div>
+        <p id="md-popup-room-locked" class="text-xs text-slate-400 italic text-center pt-1"></p>
+      </div>
+
+    </div>
+
+    <!-- Footer Call to Actions -->
+    <div class="p-5 border-t border-gold/10 bg-[#05020c] shrink-0 flex gap-3">
+      <button onclick="window.closeMatchDetailsModal()" class="flex-1 py-3 bg-black/40 border border-gold/15 rounded-xl font-bold uppercase text-slate-300 hover:text-white text-xs transition-all">
+        Close
+      </button>
+      <div id="md-popup-join-btn-container" class="flex-1"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Winner Split Floating Micro-Popup -->
+<div id="winner-split-popup" class="fixed z-[100] hidden glass-luxury p-4 rounded-2xl border border-gold/30 shadow-[0_4px_25px_rgba(212,175,55,0.3)] text-xs font-grotesk w-56 transition-all duration-200 opacity-0 scale-95 pointer-events-none">
+  <div class="flex justify-between items-center border-b border-gold/10 pb-1.5 mb-2">
+    <span class="font-rajdhani font-black uppercase tracking-wider text-gold text-sm">Winner Prize</span>
+    <button onclick="window.closeWinnerSplitPopup()" class="text-slate-400 hover:text-white transition-colors"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <div id="winner-split-content" class="space-y-1.5">
+    <!-- Dynamic Content -->
+  </div>
+</div>
+
 <script type="module">
   import './utils.js';
   import './firebase.js';
@@ -648,3 +765,4 @@ ESP<span class="text-white logo-span-light font-black">ORTS</span>
 </script>
 </body>
 </html>
+<!-- --- END OF FILE index.html --- -->
